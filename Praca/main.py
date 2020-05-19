@@ -1,19 +1,21 @@
 from PIL import Image
 import numpy as np
 
-
 import file
 import num2YCbCr
-import axis_plus
+import col_row_plus
 import resolution
+import quantization
 import blocks
+import entropy_encoding
 
 #konwersja obrazu
-print("Konwersja obrazu na warosci liczbowe")
+print("Konwersja obrazu na wartosci liczbowe")
 obrazek = "lena.png"
 #obrazek = "serce.jpg"
 img = Image.open(obrazek)
 I = np.array(img)
+QL = 50
 
 #tworzenie macierzy dla YCbCr
 print("Tworzenie macierzy YCbCr")
@@ -24,64 +26,58 @@ Cr = np.zeros((int(img.size[0]), int(img.size[1])))
 #zapisywanie do macierzy wartosci
 num2YCbCr.YCbCr(I,Y,Cb,Cr)
 
-#luminancja
 file.save(Y,"Y")
-
-#chrominancja niebieskiego
 file.save(Cb,"Cb")
-
-#chrominancja czerwonego
 file.save(Cr,"Cr")
 
-print("Sprawdzenie zgodnosci macierzy")
-#dodawanie kolumny i macierzy
-if(img.size[0] % 2 != 0 or img.size[1] % 2 != 0):
-    num1 = 2 - (img.size[0] % 2)
-    num2 = 2 - (img.size[1] % 2)
-    new_Cb = np.zeros((int(Cb.shape[0] + num1), int(Cb.shape[1]+ num2)))
-    axis_plus.add_col_row(Cb, new_Cb, num1, num2)
-    new_Cr = np.zeros((int(Cr.shape[0] + num1), int(Cr.shape[1] + num2)))
-    axis_plus.add_col_row(Cr, new_Cr, num1, num2)
-    Cb = new_Cb
-    Cr = new_Cr
+#walidacja
+col_row_plus.validation(Cb,2)
+col_row_plus.validation(Cr,2)
 
-    #chrominancja niebieskiego
-    file.save(new_Cb,"Cb+")
+file.save(Cb,"Cb+")
+file.save(Cr,"Cr+")
 
-    #chrominancja czerwonego
-    file.save(new_Cr,"Cr+")
+#podprobkowanie
+Cb2 = resolution.subsampling(Cb)
+Cr2 = resolution.subsampling(Cr)
 
-Cb2 = np.zeros((int(Cb.shape[0]/2), int(Cb.shape[1]/2)))
-resolution.subsampling(Cb, Cb2)
-Cr2 = np.zeros((int(Cr.shape[0]/2), int(Cr.shape[1]/2)))
-resolution.subsampling(Cr, Cr2)
-
-#chrominancja niebieskiego
 file.save(Cb2,"Cb2")
-
-#chrominancja czerwonego
 file.save(Cr2,"Cr2")
 
-print("Sprawdzenie zgodnosci macierzy")
-if(Y.shape[0] % 8 != 0 or Y.shape[1] % 8 != 0):
-    num1 = 8 - (Y.shape[0] % 8)
-    num2 = 8 - (Y.shape[1] % 8)
-    new_Y = np.zeros((int(Y.shape[0] + num1), int(Y.shape[1]+ num2)))
-    axis_plus.add_col_row(Y, new_Y, num1, num2)
-    Y = new_Y
-    file.save(Y,"Y+")
+#walidacja
+col_row_plus.validation(Y,8)
+col_row_plus.validation(Cb2,8)
+col_row_plus.validation(Cr2,8)
 
-if(Cb2.shape[0] % 8 != 0 or Cb2.shape[1] % 8 != 0):
-    num1 = 8 - (Cb2.shape[0] % 8)
-    num2 = 8 - (Cb2.shape[1] % 8)
-    new_Cb2 = np.zeros((int(Cb2.shape[0] + num1), int(Cb2.shape[1]+ num2)))
-    axis_plus.add_col_row(Cb2, new_Cb2, num1, num2)
-    new_Cr2 = np.zeros((int(Cr2.shape[0] + num1), int(Cr2.shape[1] + num2)))
-    axis_plus.add_col_row(Cr2, new_Cr2, num1, num2)
-    Cb2 = new_Cb2
-    Cr2 = new_Cr2
-    file.save(Cb2,"Cb2+")
-    file.save(Cr2,"Cr2+")
+file.save(Y,"Y+")
+file.save(Cb2,"Cr2+")
+file.save(Cr2,"Cb2+")
+
+print("Tworzenie tablicy kwantyzacji")
+QTY = quantization.tables(np.zeros((8,8)), 'Y', QL)
+QTC = quantization.tables(np.zeros((8,8)), 'C', QL)
+
+print("Utworzenie tablic dla stalych transformat")
+DCY = np.zeros(int(Y.shape[0] / 8) * int(Y.shape[1] / 8))
+DCCr = np.zeros(int(Cr2.shape[0] / 8) * int(Cr2.shape[1] / 8))
+DCCb = np.zeros(int(Cb2.shape[0] / 8) * int(Cb2.shape[1] / 8))
+
+print("Utworzenie tablic dla zmiennych transformat")
+ACY = np.zeros(int(Y.shape[0] / 8) * int(Y.shape[1] / 8), 63)
+ACCr = np.zeros(int(Cr2.shape[0] / 8) * int(Cr2.shape[1] / 8), 63)
+ACCb = np.zeros(int(Cb2.shape[0] / 8) * int(Cb2.shape[1] / 8), 63)
 
 print("Dzielenie macierzy na bloki")
-blocks.b8x8(Y)
+blocks.encoding(Y,'Y',QTY,DCY,ACY)
+
+print("Tworzenie wektorow przyrostu")
+diff = entropy_encoding.diff(DCY)
+
+print(ACY[0][0])
+
+'''
+print("Kompresowanie stalych transformat")
+compressed_file = open("compressed file.txt","a")
+entropy_encoding.compresionDC(compressed_file,diff)
+compressed_file.close()
+'''
